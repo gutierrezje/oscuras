@@ -1,0 +1,14 @@
+#version 450
+
+layout (set = 0, binding = 0, rgba8) uniform writeonly image2D outTexture;
+layout (set = 0, binding = 1) uniform sampler samp;
+
+layout (local_size_x = 32, local_size_y = 32, local_size_z = 1) in;
+void main() {
+    int x = int(gl_WorkGroupID.x * gl_WorkGroupSize.x + gl_LocalInvocationID.x);
+    int y = int(gl_WorkGroupID.y * gl_WorkGroupSize.y + gl_LocalInvocationID.y);
+    ivec2 resolution = ivec2(640, 480); // TODO: pass in uniform variable
+    ivec2 writeIndex = ivec2(x, y);
+    vec3 color = vec3(float(x) / resolution.x, float(y) / resolution.y, 0.2);
+    imageStore(outTexture, writeIndex, vec4(color, 1.0));
+}
