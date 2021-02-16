@@ -1,14 +1,13 @@
 use data::VERTICES;
 use wgpu::util::DeviceExt;
-use winit::{
-    event::*,
-    window::Window
-};
+use winit::{event::*, window::Window};
 
 mod data;
 mod pathtracer;
+mod camera;
 
 use pathtracer::Pathtracer;
+use camera::Camera;
 
 pub struct Viewer {
     surface: wgpu::Surface,
@@ -18,15 +17,18 @@ pub struct Viewer {
     swap_chain: wgpu::SwapChain,
     size: winit::dpi::PhysicalSize<u32>,
     viewer_pipeline: wgpu::RenderPipeline,
-    viewer_bind_group: wgpu::BindGroup,
+    viewer_bg: wgpu::BindGroup,
     vertex_buffer: wgpu::Buffer,
     num_vertices: u32,
-    pathtracer: Pathtracer
+    camera: Camera,
+    pathtracer: Pathtracer,
 }
 
 impl Viewer {
     pub async fn new(window: &Window) -> Self {
         let size = window.inner_size();
+        
+        let camera = Camera::new(&size);
 
         // The instance is a handle to our GPU
         // BackendBit::PRIMARY => Vulkan + Metal + DX12+ Browser WebGPU
@@ -63,7 +65,7 @@ impl Viewer {
         };
         let swap_chain = device.create_swap_chain(&surface, &sc_desc);
 
-        let pathtracer = Pathtracer::new(&device, size);
+        let pathtracer = Pathtracer::new(&device, &camera);
 
         // Set up the vertex buffer for our quad
         let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -78,37 +80,41 @@ impl Viewer {
         let fs_module =
             device.create_shader_module(&wgpu::include_spirv!("shaders/viewer.frag.spv"));
 
-        let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+        let viewer_bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: None,
-            entries: &[wgpu::BindGroupLayoutEntry {
-                binding: 0,                             // The location
-                visibility: wgpu::ShaderStage::FRAGMENT,
-                ty: wgpu::BindingType::Texture {
-                    sample_type: wgpu::TextureSampleType::Float {filterable: true},
-                    view_dimension: wgpu::TextureViewDimension::D2,
-                    multisampled: false,
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0, // The location
+                    visibility: wgpu::ShaderStage::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        multisampled: false,
+                    },
+                    count: None,
                 },
-                count: None,
-            },
-            wgpu::BindGroupLayoutEntry {
-                binding: 1,
-                visibility: wgpu::ShaderStage::FRAGMENT,
-                ty: wgpu::BindingType::Sampler {
-                    filtering: true,
-                    comparison: false,
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStage::FRAGMENT,
+                    ty: wgpu::BindingType::Sampler {
+                        filtering: true,
+                        comparison: false,
+                    },
+                    count: None,
                 },
-                count: None,
-            }],
+            ],
         });
 
-        let viewer_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+        let viewer_bg = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("display_bind_group"),
-            layout: &bind_group_layout,
+            layout: &viewer_bgl,
             entries: &[
                 wgpu::BindGroupEntry {
                     binding: 0,
                     resource: wgpu::BindingResource::TextureView(
-                        &pathtracer.texture().create_view(&wgpu::TextureViewDescriptor::default()),
+                        &pathtracer
+                            .texture()
+                            .create_view(&wgpu::TextureViewDescriptor::default()),
                     ),
                 },
                 wgpu::BindGroupEntry {
@@ -118,15 +124,15 @@ impl Viewer {
             ],
         });
 
-        let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+        let viewer_pl = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: None,
-            bind_group_layouts: &[&bind_group_layout],
+            bind_group_layouts: &[&viewer_bgl],
             push_constant_ranges: &[],
         });
 
         let viewer_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("Render Pipeline"),
-            layout: Some(&pipeline_layout),
+            layout: Some(&viewer_pl),
             vertex: wgpu::VertexState {
                 module: &vs_module,
                 entry_point: "main",
@@ -154,7 +160,8 @@ impl Viewer {
             viewer_pipeline,
             vertex_buffer,
             num_vertices,
-            viewer_bind_group,
+            viewer_bg,
+            camera,
             pathtracer,
         }
     }
@@ -202,7 +209,7 @@ impl Viewer {
         });
 
         render_pass.set_pipeline(&self.viewer_pipeline);
-        render_pass.set_bind_group(0, &self.viewer_bind_group, &[]);
+        render_pass.set_bind_group(0, &self.viewer_bg, &[]);
         render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
         render_pass.draw(0..self.num_vertices, 0..1);
         drop(render_pass);

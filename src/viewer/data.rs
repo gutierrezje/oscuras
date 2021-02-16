@@ -26,6 +26,15 @@ impl Vertex {
     }
 }
 
+#[repr(C)]
+#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct Ray {
+    origin: [f32; 3],
+    _padding: u32,
+    direction: [f32; 3],
+    _more_padding: u32,
+}
+
 pub const VERTICES: &[Vertex] = &[
     Vertex {
         position: [1.0, 1.0, 0.0],

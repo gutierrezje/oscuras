@@ -1,0 +1,45 @@
+#version 450
+
+struct Ray {
+    vec3 origin;
+    vec3 direction;
+};
+
+layout (std140, set = 0, binding = 0) readonly uniform Camera {
+    uvec2 resolution;
+    vec2 pixelLength;
+    vec3 position;
+    float aspect_ratio;
+    vec3 lookAt;
+    float fovx;
+    vec3 up;
+    float fovy;
+    vec3 right;
+    // uint _padding;
+    vec3 viewDir;
+} camera;
+
+layout (std430, set = 0, binding = 1) writeonly buffer Rays {
+    Ray data[];
+} raysSSBO;
+
+layout (local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
+void main() {
+    int x = int(gl_GlobalInvocationID.x);
+    int y = int(gl_GlobalInvocationID.y);
+
+    if (x > camera.resolution.x || y > camera.resolution.y) {
+        return;
+    }
+
+    uint index = x + (y * camera.resolution.x);
+
+    raysSSBO.data[index] = Ray(
+        camera.position,
+        normalize(
+                normalize(camera.viewDir) - 
+                camera.right * camera.pixelLength.x * (float(x) - float(camera.resolution.x)) * 0.5f -
+                camera.up * camera.pixelLength.y * (float(y) - float(camera.resolution.y)) * 0.5f
+        )
+    );
+}

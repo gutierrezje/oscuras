@@ -7,14 +7,14 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-image = "0.23"
-winit = "0.22"
-cgmath = "0.17"
-env_logger = "0.7"
-log = "0.4"
-futures = "0.3"
 bytemuck = {version = "1.4", features = ["derive"]}
+cgmath = {version = "0.18", features = ["swizzle"]}
+env_logger = "0.7"
+futures = "0.3"
+image = "0.23"
+log = "0.4"
 wgpu = "0.7"
+winit = "0.22"
 
 [build-dependencies]
 anyhow = "1.0"
