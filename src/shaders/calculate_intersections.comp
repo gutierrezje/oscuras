@@ -1,0 +1,49 @@
+#version 450
+
+struct Sphere {
+    vec3 center;
+    float radius;
+};
+
+struct Ray {
+    vec3 origin;
+    vec3 direction;
+};
+
+layout (std430, set = 0, binding = 0) writeonly buffer Intersections {
+    uint data[];
+} intersects;
+
+layout (std430, set = 0, binding = 1) readonly buffer Geometry {
+    Sphere data[];
+} geoms;
+
+layout (std430, set = 0, binding = 2) readonly buffer Rays {
+    Ray data[];
+} raysSSBO;
+
+layout (std140, set = 0, binding = 3) uniform Params {
+    uint num_geoms;
+    uint num_paths;
+} params;
+
+uint sphereIntersectTest(Sphere sphere, Ray ray);
+
+layout (local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
+void main() {
+    uint thid = gl_GlobalInvocationID.x;
+    if (thid > params.num_paths) return;
+
+    for (int i = 0; i < params.num_geoms; i += 1) {
+        intersects.data[thid] = sphereIntersectTest(geoms.data[i], raysSSBO.data[thid]);
+    }
+}
+
+uint sphereIntersectTest(Sphere sphere, Ray ray) {
+    vec3 oc = ray.origin - sphere.center;
+    float a = dot(ray.direction, ray.direction);
+    float b = 2.0 * dot(oc, ray.direction);
+    float c = dot(oc, oc) - sphere.radius * sphere.radius;
+    float discriminant = b * b - 4 * a * c;
+    return (discriminant > 0) ? 1 : 0;
+}

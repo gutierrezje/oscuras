@@ -23,7 +23,8 @@ impl Camera {
         let resolution = [win_res.width, win_res.height];
         let pos = Vector3::<f32>::new(0.0, 0.0, 0.0);
         let at = Vector3::<f32>::new(0.0, 0.0, 1.0);
-        let view = at - pos;
+        let mut view = at - pos;
+        view = view / cgmath::dot(view, view);
 
         let mut up = Vector3::<f32>::new(0.0, 1.0, 0.0);
         let r = up.cross(at);

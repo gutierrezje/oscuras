@@ -27,12 +27,25 @@ impl Vertex {
 }
 
 #[repr(C)]
+#[derive(Clone, Copy, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct Intersection {
+    hit: u32
+}
+
+#[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct Ray {
     origin: [f32; 3],
     _padding: u32,
     direction: [f32; 3],
     _more_padding: u32,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct Sphere {
+    pub center: [f32; 3],
+    pub radius: f32,
 }
 
 pub const VERTICES: &[Vertex] = &[

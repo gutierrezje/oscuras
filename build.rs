@@ -24,7 +24,9 @@ impl ShaderData {
             _ => bail!("Unsupported shader: {}", src_path.display()),
         };
 
+        //let mut common = read_to_string("./src/shaders/common.glsl")?;
         let src = read_to_string(src_path.clone())?;
+        //common.push_str(&src);
         let spv_path = src_path.with_extension(format!("{}.spv", extension));
 
         Ok(Self {

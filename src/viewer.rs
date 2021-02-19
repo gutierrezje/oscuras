@@ -2,12 +2,15 @@ use data::VERTICES;
 use wgpu::util::DeviceExt;
 use winit::{event::*, window::Window};
 
+mod camera;
 mod data;
 mod pathtracer;
-mod camera;
+mod scene;
 
 use pathtracer::Pathtracer;
 use camera::Camera;
+use scene::Scene;
+use data::Sphere;
 
 pub struct Viewer {
     surface: wgpu::Surface,
@@ -21,6 +24,7 @@ pub struct Viewer {
     vertex_buffer: wgpu::Buffer,
     num_vertices: u32,
     camera: Camera,
+    scene: Scene,
     pathtracer: Pathtracer,
 }
 
@@ -29,6 +33,14 @@ impl Viewer {
         let size = window.inner_size();
         
         let camera = Camera::new(&size);
+        let mut geoms = Vec::<Sphere>::new();
+        geoms.push(Sphere {
+            center: [0.0, 0.0, 2.0],
+            radius: 1f32,
+        });
+        let scene = Scene {
+            geometry: geoms,
+        };
 
         // The instance is a handle to our GPU
         // BackendBit::PRIMARY => Vulkan + Metal + DX12+ Browser WebGPU
@@ -65,7 +77,7 @@ impl Viewer {
         };
         let swap_chain = device.create_swap_chain(&surface, &sc_desc);
 
-        let pathtracer = Pathtracer::new(&device, &camera);
+        let pathtracer = Pathtracer::new(&device, &camera, &scene);
 
         // Set up the vertex buffer for our quad
         let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -162,6 +174,7 @@ impl Viewer {
             num_vertices,
             viewer_bg,
             camera,
+            scene,
             pathtracer,
         }
     }

@@ -37,9 +37,9 @@ void main() {
     raysSSBO.data[index] = Ray(
         camera.position,
         normalize(
-                normalize(camera.viewDir) - 
-                camera.right * camera.pixelLength.x * (float(x) - float(camera.resolution.x)) * 0.5f -
-                camera.up * camera.pixelLength.y * (float(y) - float(camera.resolution.y)) * 0.5f
+                camera.viewDir - 
+                camera.right * camera.pixelLength.x * (float(x) - float(camera.resolution.x) * 0.5f) -
+                camera.up * camera.pixelLength.y * (float(y) - float(camera.resolution.y) * 0.5f)
         )
     );
 }
