@@ -1,6 +1,6 @@
-use super::data;
+use super::data_types;
 
 #[repr(C)]
 pub struct Scene {
-    pub geometry: Vec<data::Sphere>,
+    pub geometry: Vec<data_types::Sphere>,
 }

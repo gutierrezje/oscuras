@@ -1,5 +1,5 @@
 # Oscuras
-# A pathtracer written in Rust and WebGPU
+## A pathtracer written in Rust using WebGPU
 
-### Screenshots
+### Screenshots (Progress)
 ![Current progress](./images/progress/oscuras-2-18-2021.PNG)

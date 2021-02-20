@@ -1,10 +1,11 @@
 use bytemuck::cast_slice;
-use cgmath::{Vector3};
-use wgpu::util::DeviceExt;
+use cgmath::Vector3;
+use wgpu::{ShaderStage, util::DeviceExt};
 
-use super::data::*;
 use super::camera::Camera;
+use super::data_types::*;
 use super::scene::Scene;
+use super::gpu_buffer::{GPUBufferDescription, GPUBuffer};
 
 pub struct Pathtracer {
     width: u32,
@@ -12,12 +13,12 @@ pub struct Pathtracer {
     // Resources
     display_texture: wgpu::Texture,
     display_sampler: wgpu::Sampler,
-    intersect_buffer: wgpu::Buffer,
-    geometry_buffer: wgpu::Buffer,
-    camera_buffer: wgpu::Buffer,
-    paths_buffer: wgpu::Buffer,
-    params_buffer0: wgpu::Buffer,
-    params_buffer1: wgpu::Buffer,
+    intersect_buffer: GPUBuffer,
+    geometry_buffer: GPUBuffer,
+    camera_buffer: GPUBuffer,
+    paths_buffer: GPUBuffer,
+    params_buffer0: GPUBuffer,
+    params_buffer1: GPUBuffer,
 
     // Pipelines
     path_gen_bg: wgpu::BindGroup,
@@ -34,48 +35,68 @@ impl Pathtracer {
         let height = camera.res_y();
 
         // Initialize resources
-        let camera_buffer = device.create_buffer_init(
-            &wgpu::util::BufferInitDescriptor {
-                label: Some("camera_buffer"),
-                contents: bytemuck::cast_slice(&[camera.clone()]),
-                usage: wgpu::BufferUsage::UNIFORM | wgpu::BufferUsage::COPY_DST,
-            }
-        );
-
-        let paths_buffer = device.create_buffer(&wgpu::BufferDescriptor {
-            label: None,
-            size: ((width * height) as usize * std::mem::size_of::<Ray>()) as wgpu::BufferAddress,
-            usage: wgpu::BufferUsage::STORAGE,
-            mapped_at_creation: false,
-        });
-
-        let params_buffer0 = device.create_buffer_init(
-            &wgpu::util::BufferInitDescriptor {
-                label: Some("params_buffer0"),
-                contents: bytemuck::cast_slice(&[[width, height]]),
-                usage: wgpu::BufferUsage::UNIFORM | wgpu::BufferUsage::COPY_DST,
-            }
-        );
-
-        let intersect_buffer = device.create_buffer(&wgpu::BufferDescriptor {
-            label: None,
-            size: ((width * height) as usize * std::mem::size_of::<Intersection>()) as wgpu::BufferAddress,
-            usage: wgpu::BufferUsage::STORAGE,
-            mapped_at_creation: false,
-        });
-
-        let geometry_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: None,
-            contents: bytemuck::cast_slice(&scene.geometry),
-            usage: wgpu::BufferUsage::STORAGE,
-        });
-
-        let params_buffer1 = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("params_buffer1"),
-            contents: bytemuck::cast_slice(&[scene.geometry.len() as u32, width * height]),
+        let temp_cam = [*camera];
+        let camera_buf_desc = GPUBufferDescription::<Camera> {
+            binding_type: wgpu::BufferBindingType::Uniform,
+            contents: Some(&temp_cam),
+            element_count: 1,
+            element_size: std::mem::size_of::<Camera>(),
             usage: wgpu::BufferUsage::UNIFORM | wgpu::BufferUsage::COPY_DST,
-        });
-        
+        };
+        let camera_buffer = GPUBuffer::new(&device, camera_buf_desc);
+
+        let paths_buf_desc = GPUBufferDescription::<()> {
+            binding_type: wgpu::BufferBindingType::Storage {read_only: true},
+            contents: None,
+            element_count: width * height,
+            element_size: std::mem::size_of::<Ray>(),
+            usage: wgpu::BufferUsage::STORAGE,
+        };
+        let paths_buffer = GPUBuffer::new(&device, paths_buf_desc);
+
+        let params0 = [width, height];
+        let params_buf0_des = GPUBufferDescription::<u32> {
+            binding_type: wgpu::BufferBindingType::Uniform,
+            contents: Some(&params0),
+            element_count: 2,
+            element_size: 4,
+            usage: wgpu::BufferUsage::UNIFORM | wgpu::BufferUsage::COPY_DST,
+        };
+        let params_buffer0 = GPUBuffer::new(&device, params_buf0_des);
+
+        let intersect_buf_desc = GPUBufferDescription::<()> {
+            binding_type: wgpu::BufferBindingType::Storage {read_only: true},
+            contents: None,
+            element_count: width * height,
+            element_size: std::mem::size_of::<u32>(),
+            usage: wgpu::BufferUsage::STORAGE,
+        };
+        let intersect_buffer = GPUBuffer::new(&device, intersect_buf_desc);
+
+        let geom_buf_desc = GPUBufferDescription::<Sphere> {
+            binding_type: wgpu::BufferBindingType::Storage {read_only: true},
+            contents: Some(&scene.geometry),
+            element_count: scene.geometry.len() as u32,
+            element_size: std::mem::size_of::<Sphere>(),
+            usage: wgpu::BufferUsage::STORAGE,
+        };
+        let geometry_buffer = GPUBuffer::new(&device, geom_buf_desc);
+
+        let params1 = [scene.geometry.len() as u32, width * height];
+        let params_buf1_desc = GPUBufferDescription::<u32> {
+            binding_type: wgpu::BufferBindingType::Uniform,
+            contents: Some(&params1),
+            element_count: 2,
+            element_size: 4,
+            usage: wgpu::BufferUsage::UNIFORM | wgpu::BufferUsage::COPY_DST,
+        };
+        let params_buffer1 = GPUBuffer::new(&device, params_buf1_desc);
+        //let params_buffer1 = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        //    label: Some("params_buffer1"),
+        //    contents: bytemuck::cast_slice(&[scene.geometry.len() as u32, width * height]),
+        //    usage: wgpu::BufferUsage::UNIFORM | wgpu::BufferUsage::COPY_DST,
+        //});
+
         let texture_size = wgpu::Extent3d {
             width,
             height,
@@ -105,40 +126,16 @@ impl Pathtracer {
         let path_gen_bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: None,
             entries: &[
-                wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStage::COMPUTE,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Uniform,
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
-                    count: None,
-                },
-                wgpu::BindGroupLayoutEntry {
-                    binding: 1,
-                    visibility: wgpu::ShaderStage::COMPUTE,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Storage {read_only: false},
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
-                    count: None,
-                },
+                camera_buffer.as_bgl_entry(0, wgpu::ShaderStage::COMPUTE, true),
+                paths_buffer.as_bgl_entry(1, wgpu::ShaderStage::COMPUTE, false),
             ],
         });
         let path_gen_bg = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("path_gen_bind_group"),
             layout: &path_gen_bgl,
             entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: camera_buffer.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: paths_buffer.as_entire_binding(),
-                }
+                camera_buffer.as_bg_entry(0),
+                paths_buffer.as_bg_entry(1),
             ],
         });
 
@@ -158,81 +155,35 @@ impl Pathtracer {
             label: Some("path_gen_pipeline"),
             layout: Some(&path_gen_pl),
             module: &path_gen_module,
-            entry_point: "main", 
+            entry_point: "main",
         });
 
         let hit_calc_bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: None,
             entries: &[
-                wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStage::COMPUTE,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Storage {read_only: false},
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
-                    count: None,
-                },
-                wgpu::BindGroupLayoutEntry {
-                    binding: 1,
-                    visibility: wgpu::ShaderStage::COMPUTE,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Storage {read_only: true},
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
-                    count: None,
-                },
-                wgpu::BindGroupLayoutEntry {
-                    binding: 2, 
-                    visibility: wgpu::ShaderStage::COMPUTE,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Storage {read_only: true},
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
-                    count: None,
-                },
-                wgpu::BindGroupLayoutEntry {
-                    binding: 3,
-                    visibility: wgpu::ShaderStage::COMPUTE,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Uniform,
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
-                    count: None,
-                },
-            ]
+                intersect_buffer.as_bgl_entry(0, wgpu::ShaderStage::COMPUTE, false),
+                geometry_buffer.as_bgl_entry(1, wgpu::ShaderStage::COMPUTE, true),
+                paths_buffer.as_bgl_entry(2, wgpu::ShaderStage::COMPUTE, true),
+                params_buffer1.as_bgl_entry(3, wgpu::ShaderStage::COMPUTE, true),
+            ],
         });
 
         let hit_calc_bg = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: None,
             layout: &hit_calc_bgl,
             entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: intersect_buffer.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: geometry_buffer.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 2,
-                    resource: paths_buffer.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 3,
-                    resource: params_buffer1.as_entire_binding(),
-                }
+                intersect_buffer.as_bg_entry(0),
+                geometry_buffer.as_bg_entry(1),
+                paths_buffer.as_bg_entry(2),
+                params_buffer1.as_bg_entry(3),
             ],
         });
 
         let hit_calc_module = device.create_shader_module(&wgpu::ShaderModuleDescriptor {
             label: None,
-            source: wgpu::util::make_spirv(include_bytes!("../shaders/calculate_intersections.comp.spv")),
+            source: wgpu::util::make_spirv(include_bytes!(
+                "../shaders/calculate_intersections.comp.spv"
+            )),
             flags: std::iter::empty::<wgpu::ShaderFlags>().collect(),
         });
 
@@ -253,7 +204,7 @@ impl Pathtracer {
             label: None,
             entries: &[
                 wgpu::BindGroupLayoutEntry {
-                    binding: 0, // The location
+                    binding: 0,
                     visibility: wgpu::ShaderStage::COMPUTE,
                     ty: wgpu::BindingType::StorageTexture {
                         access: wgpu::StorageTextureAccess::WriteOnly,
@@ -271,36 +222,9 @@ impl Pathtracer {
                     },
                     count: None,
                 },
-                wgpu::BindGroupLayoutEntry {
-                    binding: 2,
-                    visibility: wgpu::ShaderStage::COMPUTE,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Storage {read_only: true},
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
-                    count: None,
-                },
-                wgpu::BindGroupLayoutEntry {
-                    binding: 3,
-                    visibility: wgpu::ShaderStage::COMPUTE,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Uniform,
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
-                    count: None,
-                },
-                wgpu::BindGroupLayoutEntry {
-                    binding: 4,
-                    visibility: wgpu::ShaderStage::COMPUTE,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Storage {read_only: true},
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
-                    count: None,
-                },
+                paths_buffer.as_bgl_entry(2, wgpu::ShaderStage::COMPUTE, true),
+                params_buffer0.as_bgl_entry(3, wgpu::ShaderStage::COMPUTE, true),
+                intersect_buffer.as_bgl_entry(4, wgpu::ShaderStage::COMPUTE, true),
             ],
         });
         let image_bg = device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -317,18 +241,9 @@ impl Pathtracer {
                     binding: 1,
                     resource: wgpu::BindingResource::Sampler(&display_sampler),
                 },
-                wgpu::BindGroupEntry {
-                    binding: 2,
-                    resource: paths_buffer.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 3,
-                    resource: params_buffer0.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 4,
-                    resource: intersect_buffer.as_entire_binding(),
-                }
+                paths_buffer.as_bg_entry(2),
+                params_buffer0.as_bg_entry(3),
+                intersect_buffer.as_bg_entry(4),
             ],
         });
 
@@ -373,15 +288,15 @@ impl Pathtracer {
         let block_dims_2d = Vector3::new(
             (self.width as f32 / 16_f32).ceil() as u32,
             (self.height as f32 / 16_f32).ceil() as u32,
-            1
+            1,
         );
 
         let block_dims_1d = Vector3::new(
             ((self.width * self.height) as f32 / 256f32).ceil() as u32,
             1,
-            1
+            1,
         );
-        
+
         compute_encoder.set_pipeline(&self.path_gen_pipeline);
         compute_encoder.set_bind_group(0, &self.path_gen_bg, &[]);
         compute_encoder.dispatch(block_dims_2d.x, block_dims_2d.y, block_dims_2d.z);

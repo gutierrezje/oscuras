@@ -1,16 +1,17 @@
-use data::VERTICES;
+use data_types::VERTICES;
 use wgpu::util::DeviceExt;
 use winit::{event::*, window::Window};
 
 mod camera;
-mod data;
+mod data_types;
+mod gpu_buffer;
 mod pathtracer;
 mod scene;
 
-use pathtracer::Pathtracer;
 use camera::Camera;
+use data_types::Sphere;
+use pathtracer::Pathtracer;
 use scene::Scene;
-use data::Sphere;
 
 pub struct Viewer {
     surface: wgpu::Surface,
@@ -31,16 +32,14 @@ pub struct Viewer {
 impl Viewer {
     pub async fn new(window: &Window) -> Self {
         let size = window.inner_size();
-        
+
         let camera = Camera::new(&size);
         let mut geoms = Vec::<Sphere>::new();
         geoms.push(Sphere {
             center: [0.0, 0.0, 2.0],
             radius: 1f32,
         });
-        let scene = Scene {
-            geometry: geoms,
-        };
+        let scene = Scene { geometry: geoms };
 
         // The instance is a handle to our GPU
         // BackendBit::PRIMARY => Vulkan + Metal + DX12+ Browser WebGPU
@@ -82,7 +81,7 @@ impl Viewer {
         // Set up the vertex buffer for our quad
         let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Vertex Buffer"),
-            contents: bytemuck::cast_slice(data::VERTICES),
+            contents: bytemuck::cast_slice(data_types::VERTICES),
             usage: wgpu::BufferUsage::VERTEX,
         });
 
@@ -148,7 +147,7 @@ impl Viewer {
             vertex: wgpu::VertexState {
                 module: &vs_module,
                 entry_point: "main",
-                buffers: &[data::Vertex::desc()],
+                buffers: &[data_types::Vertex::desc()],
             },
             fragment: Some(wgpu::FragmentState {
                 module: &fs_module,
@@ -160,7 +159,7 @@ impl Viewer {
             multisample: wgpu::MultisampleState::default(),
         });
 
-        let num_vertices = data::VERTICES.len() as u32;
+        let num_vertices = data_types::VERTICES.len() as u32;
 
         Self {
             surface,
