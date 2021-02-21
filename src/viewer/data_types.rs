@@ -29,7 +29,8 @@ impl Vertex {
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct Intersection {
-    hit: u32,
+    surface_normal: [f32; 3],
+    t: f32,
 }
 
 #[repr(C)]

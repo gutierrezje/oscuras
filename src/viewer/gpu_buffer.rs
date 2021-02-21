@@ -1,8 +1,10 @@
 use bytemuck::{Pod, Zeroable};
-use wgpu::util::DeviceExt;
+use wgpu::{util::DeviceExt, BufferSlice};
 
-pub struct GPUBufferDescription<'a, T> where T: Pod + Zeroable {
-    pub binding_type: wgpu::BufferBindingType,
+pub struct GPUBufferDescription<'a, T>
+where
+    T: Pod + Zeroable,
+{
     pub contents: Option<&'a [T]>,
     pub element_count: u32,
     pub element_size: usize,
@@ -10,7 +12,6 @@ pub struct GPUBufferDescription<'a, T> where T: Pod + Zeroable {
 }
 
 pub struct GPUBuffer {
-    binding_type: wgpu::BufferBindingType,
     element_count: u32,
     handle: wgpu::Buffer,
     size: wgpu::BufferAddress,
@@ -18,8 +19,10 @@ pub struct GPUBuffer {
 }
 
 impl GPUBuffer {
-    pub fn new<T: Pod + Zeroable>(device: &wgpu::Device, buffer_desc: GPUBufferDescription<T>)-> Self {
-        let binding_type = buffer_desc.binding_type;
+    pub fn new<T: Pod + Zeroable>(
+        device: &wgpu::Device,
+        buffer_desc: GPUBufferDescription<T>,
+    ) -> Self {
         let element_count = buffer_desc.element_count;
         let size = (element_count as usize * buffer_desc.element_size) as wgpu::BufferAddress;
         let usage = buffer_desc.usage;
@@ -31,9 +34,8 @@ impl GPUBuffer {
                     contents: bytemuck::cast_slice(contents),
                     usage,
                 });
-                
-            },
-            None =>  {
+            }
+            None => {
                 handle = device.create_buffer(&wgpu::BufferDescriptor {
                     label: None,
                     mapped_at_creation: false,
@@ -42,23 +44,39 @@ impl GPUBuffer {
                 });
             }
         }
-        Self {binding_type, element_count, handle, size, usage}
+        Self {
+            element_count,
+            handle,
+            size,
+            usage,
+        }
     }
 
-    pub fn as_bgl_entry(&self, binding: u32, visibility: wgpu::ShaderStage, _read_only: bool) -> wgpu::BindGroupLayoutEntry {
+    pub fn contents(&self) -> BufferSlice {
+        self.handle.slice(..)
+    }
+
+    pub fn as_bgl_entry(
+        &self,
+        binding: u32,
+        visibility: wgpu::ShaderStage,
+        _read_only: bool,
+    ) -> wgpu::BindGroupLayoutEntry {
+        let ty;
+        if self.usage & wgpu::BufferUsage::STORAGE == wgpu::BufferUsage::STORAGE {
+            ty = wgpu::BufferBindingType::Storage {
+                read_only: _read_only,
+            };
+        } else if self.usage & wgpu::BufferUsage::UNIFORM == wgpu::BufferUsage::UNIFORM {
+            ty = wgpu::BufferBindingType::Uniform;
+        } else {
+            panic!("Trying to make a Bind Group Entry with an unsupported buffer type");
+        }
         wgpu::BindGroupLayoutEntry {
             binding,
             visibility,
             ty: wgpu::BindingType::Buffer {
-                ty: match self.binding_type {
-                    wgpu::BufferBindingType::Storage{read_only} => {
-                        match read_only == _read_only {
-                            false => wgpu::BufferBindingType::Storage {read_only: _read_only},
-                            true => self.binding_type
-                        }
-                    },
-                    _ => self.binding_type,
-                },
+                ty,
                 has_dynamic_offset: false,
                 min_binding_size: None,
             },

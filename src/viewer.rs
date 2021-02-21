@@ -10,6 +10,7 @@ mod scene;
 
 use camera::Camera;
 use data_types::Sphere;
+use gpu_buffer::{GPUBuffer, GPUBufferDescription};
 use pathtracer::Pathtracer;
 use scene::Scene;
 
@@ -22,7 +23,7 @@ pub struct Viewer {
     size: winit::dpi::PhysicalSize<u32>,
     viewer_pipeline: wgpu::RenderPipeline,
     viewer_bg: wgpu::BindGroup,
-    vertex_buffer: wgpu::Buffer,
+    vertex_buffer: GPUBuffer,
     num_vertices: u32,
     camera: Camera,
     scene: Scene,
@@ -36,8 +37,8 @@ impl Viewer {
         let camera = Camera::new(&size);
         let mut geoms = Vec::<Sphere>::new();
         geoms.push(Sphere {
-            center: [0.0, 0.0, 2.0],
-            radius: 1f32,
+            center: [0.0, 0.0, 1.0],
+            radius: 0.5f32,
         });
         let scene = Scene { geometry: geoms };
 
@@ -79,11 +80,14 @@ impl Viewer {
         let pathtracer = Pathtracer::new(&device, &camera, &scene);
 
         // Set up the vertex buffer for our quad
-        let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Vertex Buffer"),
-            contents: bytemuck::cast_slice(data_types::VERTICES),
+        let num_vertices = data_types::VERTICES.len() as u32;
+        let vert_buf_desc = GPUBufferDescription::<data_types::Vertex> {
+            contents: Some(data_types::VERTICES),
+            element_count: num_vertices,
+            element_size: std::mem::size_of::<data_types::Vertex>(),
             usage: wgpu::BufferUsage::VERTEX,
-        });
+        };
+        let vertex_buffer = GPUBuffer::new(&device, vert_buf_desc);
 
         // Shader setup
         let vs_module =
@@ -159,8 +163,6 @@ impl Viewer {
             multisample: wgpu::MultisampleState::default(),
         });
 
-        let num_vertices = data_types::VERTICES.len() as u32;
-
         Self {
             surface,
             device,
@@ -222,7 +224,7 @@ impl Viewer {
 
         render_pass.set_pipeline(&self.viewer_pipeline);
         render_pass.set_bind_group(0, &self.viewer_bg, &[]);
-        render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
+        render_pass.set_vertex_buffer(0, self.vertex_buffer.contents());
         render_pass.draw(0..self.num_vertices, 0..1);
         drop(render_pass);
 

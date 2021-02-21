@@ -1,11 +1,9 @@
-use bytemuck::cast_slice;
 use cgmath::Vector3;
-use wgpu::{ShaderStage, util::DeviceExt};
 
 use super::camera::Camera;
 use super::data_types::*;
+use super::gpu_buffer::{GPUBuffer, GPUBufferDescription};
 use super::scene::Scene;
-use super::gpu_buffer::{GPUBufferDescription, GPUBuffer};
 
 pub struct Pathtracer {
     width: u32,
@@ -37,7 +35,6 @@ impl Pathtracer {
         // Initialize resources
         let temp_cam = [*camera];
         let camera_buf_desc = GPUBufferDescription::<Camera> {
-            binding_type: wgpu::BufferBindingType::Uniform,
             contents: Some(&temp_cam),
             element_count: 1,
             element_size: std::mem::size_of::<Camera>(),
@@ -46,7 +43,6 @@ impl Pathtracer {
         let camera_buffer = GPUBuffer::new(&device, camera_buf_desc);
 
         let paths_buf_desc = GPUBufferDescription::<()> {
-            binding_type: wgpu::BufferBindingType::Storage {read_only: true},
             contents: None,
             element_count: width * height,
             element_size: std::mem::size_of::<Ray>(),
@@ -56,7 +52,6 @@ impl Pathtracer {
 
         let params0 = [width, height];
         let params_buf0_des = GPUBufferDescription::<u32> {
-            binding_type: wgpu::BufferBindingType::Uniform,
             contents: Some(&params0),
             element_count: 2,
             element_size: 4,
@@ -65,16 +60,14 @@ impl Pathtracer {
         let params_buffer0 = GPUBuffer::new(&device, params_buf0_des);
 
         let intersect_buf_desc = GPUBufferDescription::<()> {
-            binding_type: wgpu::BufferBindingType::Storage {read_only: true},
             contents: None,
             element_count: width * height,
-            element_size: std::mem::size_of::<u32>(),
+            element_size: std::mem::size_of::<Intersection>(),
             usage: wgpu::BufferUsage::STORAGE,
         };
         let intersect_buffer = GPUBuffer::new(&device, intersect_buf_desc);
 
         let geom_buf_desc = GPUBufferDescription::<Sphere> {
-            binding_type: wgpu::BufferBindingType::Storage {read_only: true},
             contents: Some(&scene.geometry),
             element_count: scene.geometry.len() as u32,
             element_size: std::mem::size_of::<Sphere>(),
@@ -84,18 +77,12 @@ impl Pathtracer {
 
         let params1 = [scene.geometry.len() as u32, width * height];
         let params_buf1_desc = GPUBufferDescription::<u32> {
-            binding_type: wgpu::BufferBindingType::Uniform,
             contents: Some(&params1),
             element_count: 2,
             element_size: 4,
             usage: wgpu::BufferUsage::UNIFORM | wgpu::BufferUsage::COPY_DST,
         };
         let params_buffer1 = GPUBuffer::new(&device, params_buf1_desc);
-        //let params_buffer1 = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-        //    label: Some("params_buffer1"),
-        //    contents: bytemuck::cast_slice(&[scene.geometry.len() as u32, width * height]),
-        //    usage: wgpu::BufferUsage::UNIFORM | wgpu::BufferUsage::COPY_DST,
-        //});
 
         let texture_size = wgpu::Extent3d {
             width,
@@ -133,10 +120,7 @@ impl Pathtracer {
         let path_gen_bg = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("path_gen_bind_group"),
             layout: &path_gen_bgl,
-            entries: &[
-                camera_buffer.as_bg_entry(0),
-                paths_buffer.as_bg_entry(1),
-            ],
+            entries: &[camera_buffer.as_bg_entry(0), paths_buffer.as_bg_entry(1)],
         });
 
         // Getting around https://github.com/gfx-rs/naga/issues/406
