@@ -10,7 +10,7 @@ layout (std140, set = 0, binding = 0) readonly uniform Camera {
     vec2 pixelLength;
     vec3 position;
     float aspect_ratio;
-    vec3 lookAt;
+    vec3 at;
     float fovx;
     vec3 up;
     float fovy;

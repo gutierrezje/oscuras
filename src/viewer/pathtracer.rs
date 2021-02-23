@@ -51,6 +51,8 @@ impl Pathtracer {
         let paths_buffer = GPUBuffer::new(&device, paths_buf_desc);
 
         let params0 = [width, height];
+        // TODO: pass this in to renormalize
+        //let look_at = camera.look_at();
         let params_buf0_des = GPUBufferDescription::<u32> {
             contents: Some(&params0),
             element_count: 2,
@@ -67,10 +69,10 @@ impl Pathtracer {
         };
         let intersect_buffer = GPUBuffer::new(&device, intersect_buf_desc);
 
-        let geom_buf_desc = GPUBufferDescription::<Sphere> {
+        let geom_buf_desc = GPUBufferDescription::<Geometry> {
             contents: Some(&scene.geometry),
             element_count: scene.geometry.len() as u32,
-            element_size: std::mem::size_of::<Sphere>(),
+            element_size: std::mem::size_of::<Geometry>(),
             usage: wgpu::BufferUsage::STORAGE,
         };
         let geometry_buffer = GPUBuffer::new(&device, geom_buf_desc);
@@ -300,8 +302,7 @@ impl Pathtracer {
         Need to update the following:
         The resolution in params_buffer
         Reinitialize camera_buffer
-        Reinitialize paths_buffer
-        */
+        Reinitialize paths_buffer */
         todo!()
     }
 

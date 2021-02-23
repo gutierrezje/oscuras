@@ -1,3 +1,5 @@
+use bitflags;
+
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct Vertex {
@@ -42,11 +44,22 @@ pub struct Ray {
     _more_padding: u32,
 }
 
+bitflags::bitflags! {
+    #[repr(transparent)]
+    #[derive(bytemuck::Pod, bytemuck::Zeroable)]
+    pub struct GeomType: u32 {
+        const SPHERE = 1;
+        const BOX = 2;
+        const TRIANGLE = 4;
+    }
+}
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Pod, bytemuck::Zeroable)]
-pub struct Sphere {
-    pub center: [f32; 3],
-    pub radius: f32,
+pub struct Geometry {
+    pub transf: [[f32; 4]; 4],
+    pub inverse: [[f32; 4]; 4],
+    pub transp_inv: [[f32; 4]; 4],
+    pub ty: GeomType,
 }
 
 pub const VERTICES: &[Vertex] = &[

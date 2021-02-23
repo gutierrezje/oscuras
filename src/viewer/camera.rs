@@ -1,6 +1,6 @@
 use std::f32::consts::PI;
 
-use cgmath::Vector3;
+use cgmath::{Matrix4, Point3, Vector3};
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
@@ -9,7 +9,7 @@ pub struct Camera {
     pixel_length: [f32; 2],
     position: [f32; 3],
     aspect_ratio: f32,
-    look_at: [f32; 3], // Direction camera is facing
+    at: [f32; 3], // Direction camera is facing
     fovx: f32,
     up: [f32; 3],
     fovy: f32,
@@ -45,7 +45,7 @@ impl Camera {
             pixel_length,
             position: pos.into(),
             aspect_ratio,
-            look_at: at.into(),
+            at: at.into(),
             fovx,
             up: up.into(),
             fovy,
@@ -53,6 +53,15 @@ impl Camera {
             _padding: 0,
             view_dir: view.into(),
         }
+    }
+
+    pub fn look_at(&self) -> Matrix4::<f32> {
+        Matrix4::look_at_rh(Point3::from(self.position), Point3::from(self.at), Vector3::from(self.up))
+    }
+
+    pub fn perspective(&self) -> Matrix4<f32> {
+        let fovy: cgmath::Rad<f32> = cgmath::Deg(self.fovy).into();
+        cgmath::perspective(fovy, self.aspect_ratio, 0.1, 10.0)
     }
 
     pub fn res_x(&self) -> u32 {

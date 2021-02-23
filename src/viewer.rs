@@ -1,5 +1,3 @@
-use data_types::VERTICES;
-use wgpu::util::DeviceExt;
 use winit::{event::*, window::Window};
 
 mod camera;
@@ -9,7 +7,6 @@ mod pathtracer;
 mod scene;
 
 use camera::Camera;
-use data_types::Sphere;
 use gpu_buffer::{GPUBuffer, GPUBufferDescription};
 use pathtracer::Pathtracer;
 use scene::Scene;
@@ -35,12 +32,7 @@ impl Viewer {
         let size = window.inner_size();
 
         let camera = Camera::new(&size);
-        let mut geoms = Vec::<Sphere>::new();
-        geoms.push(Sphere {
-            center: [0.0, 0.0, 1.0],
-            radius: 0.5f32,
-        });
-        let scene = Scene { geometry: geoms };
+        let scene = Scene::new();
 
         // The instance is a handle to our GPU
         // BackendBit::PRIMARY => Vulkan + Metal + DX12+ Browser WebGPU

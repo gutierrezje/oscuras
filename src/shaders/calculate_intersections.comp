@@ -1,5 +1,12 @@
 #version 450
 
+struct Geometry {
+    mat4 transf;
+    mat4 inverse;
+    mat4 transp_inv;
+    uint type;
+};
+
 struct Intersection {
     vec3 surface_normal;
     float t;
@@ -10,17 +17,12 @@ struct Ray {
     vec3 direction;
 };
 
-struct Sphere {
-    vec3 center;
-    float radius;
-};
-
-layout (std430, set = 0, binding = 0) writeonly buffer Intersections {
+layout (std430, set = 0, binding = 0) buffer Intersections {
     Intersection data[];
 } intersects;
 
-layout (std430, set = 0, binding = 1) readonly buffer Geometry {
-    Sphere data[];
+layout (std430, set = 0, binding = 1) readonly buffer GeometryList {
+    Geometry data[];
 } geoms;
 
 layout (std430, set = 0, binding = 2) readonly buffer Rays {
@@ -28,25 +30,36 @@ layout (std430, set = 0, binding = 2) readonly buffer Rays {
 } raysSSBO;
 
 layout (std140, set = 0, binding = 3) uniform Params {
+    //mat4 look_at;
     uint num_geoms;
     uint num_paths;
 } params;
 
 vec3 point_at(Ray ray, float t);
-float sphere_intersect_test(Sphere sphere, Ray ray);
+float sphere_intersect_test(Geometry sphere, Ray ray);
+
+const uint SPHERE = 1;
+const uint BOX = 2;
 
 layout (local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
 void main() {
     uint thid = gl_GlobalInvocationID.x;
     if (thid > params.num_paths) return;
 
+    float t;
+    vec3 normal;
+
     for (int i = 0; i < params.num_geoms; i += 1) {
         Ray r = raysSSBO.data[thid];
-        float t = sphere_intersect_test(geoms.data[i], r);
+        Geometry geom = geoms.data[i];
+        if (geom.type == SPHERE) {
+            t = sphere_intersect_test(geom, r);
+        }
+
         if (t > 0.0) {
-            vec3 normal = normalize(point_at(r, t) - vec3(0.0, 0.0, -1));
+            normal = normalize(geom.transp_inv * vec4(point_at(r, t), 0)).xyz;// - vec3(0,0,1));
             intersects.data[thid] = Intersection(normal, t);
-        } else {
+        } else if (intersects.data[thid].t <= 0.0) {
             intersects.data[thid] = Intersection(vec3(0.0), -1);
         }
     }
@@ -56,11 +69,17 @@ vec3 point_at(Ray ray, float t) {
     return ray.origin + (t - 1.f-4) * normalize(ray.direction);
 }
 
-float sphere_intersect_test(Sphere sphere, Ray ray) {
-    vec3 oc = ray.origin - sphere.center;
-    float a = dot(ray.direction, ray.direction);
-    float half_b = dot(oc, ray.direction);
-    float c = dot(oc, oc) - sphere.radius * sphere.radius;
+float sphere_intersect_test(Geometry sphere, Ray ray) {
+    float radius = 1.0;
+    vec3 center = (sphere.transf * vec4(0, 0, 0, 1)).xyz;
+
+    vec3 r_orig = (sphere.inverse * vec4(ray.origin, 1)).xyz;
+    vec3 r_dir = normalize(sphere.inverse * vec4(ray.direction, 0)).xyz;
+
+    vec3 oc = r_orig - center;
+    float a = dot(r_dir, r_dir);
+    float half_b = dot(oc, r_dir);
+    float c = dot(oc, oc) - radius * radius;
     float discriminant = half_b * half_b - a * c;
     return (discriminant > 0) 
         ? (-half_b - sqrt(discriminant)) / a 
